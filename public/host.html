@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Movie Bracket - Host</title>
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Comic Sans MS', cursive; background: linear-gradient(135deg, #FF6B9D 0%, #C44569 25%, #F8B195 50%, #FF9671 75%, #FFB7A6 100%); color: #333; min-height: 100vh; padding: 2rem; }
+    .container { max-width: 1000px; margin: 0 auto; padding: 2rem; background: white; border-radius: 30px; border: 6px solid #FFD700; box-shadow: 0 20px 60px rgba(0,0,0,.3); }
+    h1 { font-size: 50px; margin-bottom: 1rem; color: #FF6B9D; text-shadow: 3px 3px 0 #FFD700; text-align: center; }
+    h2 { color: #FF6B9D; margin: 1.5rem 0 1rem; font-size: 28px; }
+    .room-code { font-size: 80px; color: #FFD700; font-weight: bold; margin: 2rem 0; letter-spacing: 8px; text-align: center; text-shadow: 4px 4px 0 rgba(0,0,0,.3); font-family: Arial; }
+    .phase { display: none; }
+    .phase.active { display: block; animation: popIn .3s ease; }
+    @keyframes popIn { from { opacity: 0; transform: scale(.95); } to { opacity: 1; transform: scale(1); } }
+    button { width: 100%; padding: 18px; background: linear-gradient(135deg, #FF6B9D 0%, #C44569 100%); color: white; border: none; border-radius: 16px; cursor: pointer; font-size: 20px; font-weight: bold; margin: 1rem 0; font-family: 'Comic Sans MS', cursive; box-shadow: 0 8px 0 rgba(0,0,0,.2); transition: all .2s; }
+    button:hover { transform: translateY(-4px); }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .player-list { display: flex; gap: 1rem; flex-wrap: wrap; margin: 1.5rem 0; }
+    .player-badge { background: #FFFACD; padding: 1rem; border-radius: 12px; border: 3px solid #FFD700; font-weight: bold; font-size: 16px; }
+    .voting-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin: 2rem 0; }
+    .vote-card img { width: 100%; border-radius: 12px; border: 6px solid #FFD700; height: 300px; object-fit: cover; }
+    .vote-card p { font-size: 24px; font-weight: bold; margin-top: 1rem; color: #FF6B9D; text-align: center; }
+    .vote-count { font-size: 32px; color: #FF6B9D; margin-top: 1rem; font-weight: bold; text-align: center; }
+    .timer { font-size: 64px; color: #FF6B9D; font-weight: bold; margin: 2rem 0; text-shadow: 3px 3px 0 #FFD700; text-align: center; font-family: Arial; }
+    .round-info { font-size: 28px; font-weight: bold; color: #FF6B9D; margin: 1.5rem 0; text-shadow: 2px 2px 0 #FFD700; text-align: center; }
+    .winner-display { max-width: 500px; margin: 2rem auto; }
+    .winner-display img { width: 100%; border-radius: 12px; border: 6px solid #FFD700; }
+    .winner-display h3 { text-align: center; font-size: 36px; color: #FF6B9D; margin-top: 2rem; }
+    .center { text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎬 MOVIE BRACKET PARTY 🎬</h1>
+
+    <div id="lobbyPhase" class="phase active">
+      <h2 class="center">📺 HOST VIEW</h2>
+      <p class="center" style="font-size: 18px; margin: 1rem 0;">Share this code:</p>
+      <div class="room-code" id="roomCode">XXXX</div>
+      <p class="center" style="color: #FF6B9D; font-weight: bold; font-size: 20px;">Players: <span id="playerCount">0</span></p>
+      <div class="player-list" id="playerList"></div>
+      <button id="startBtn" onclick="startSelection()" disabled>▶️ START SELECTION (need 2+ players)</button>
+    </div>
+
+    <div id="selectionPhase" class="phase">
+      <h2>⏱️ Movie Selection</h2>
+      <div class="timer" id="selectionTimer">3:00</div>
+      <p class="center" style="color: #FF6B9D; font-weight: bold; font-size: 18px;">Movies selected: <span id="selectedCount">0</span></p>
+      <button id="tournamentBtn" onclick="startTournament()" disabled>⚔️ START TOURNAMENT</button>
+    </div>
+
+    <div id="votingPhase" class="phase">
+      <div class="round-info">Round <span id="round">1</span> • Match <span id="match">1</span></div>
+      <div class="voting-grid" id="votingDisplay"></div>
+      <p class="center" style="color: #FF6B9D; font-weight: bold; font-size: 18px;" id="voteStatus">Waiting for votes...</p>
+      <button onclick="advanceMatch()">✅ ADVANCE</button>
+    </div>
+
+    <div id="resultsPhase" class="phase">
+      <h2 class="center">🏆 CHAMPION 🏆</h2>
+      <div class="winner-display">
+        <img id="winnerImg" src="">
+        <h3 id="winnerTitle"></h3>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const socket = io();
+    let roomCode = '';
+
+    socket.on('connect', () => {
+      socket.emit('create-room', (data) => {
+        roomCode = data.code;
+        document.getElementById('roomCode').textContent = roomCode;
+      });
+    });
+
+    socket.on('update-players', (data) => {
+      const count = data.players.length;
+      document.getElementById('playerCount').textContent = count;
+      document.getElementById('playerList').innerHTML = data.players.map(p => `<div class="player-badge">${p.name}</div>`).join('');
+      document.getElementById('startBtn').disabled = count < 2;
+    });
+
+    socket.on('selection-update', (data) => {
+      document.getElementById('selectedCount').textContent = data.selectedCount;
+      document.getElementById('tournamentBtn').disabled = data.selectedCount < 2;
+    });
+
+    socket.on('next-match', (data) => {
+      const match = data.match;
+      document.getElementById('round').textContent = data.currentRound + 1;
+      document.getElementById('match').textContent = data.currentMatch + 1;
+      document.getElementById('votingDisplay').innerHTML = `
+        <div><img src="${match.m1.poster}" style="border-radius: 12px;"><p>${match.m1.title}</p><div class="vote-count" id="m1votes">0</div></div>
+        <div><img src="${match.m2.poster}" style="border-radius: 12px;"><p>${match.m2.title}</p><div class="vote-count" id="m2votes">0</div></div>
+      `;
+    });
+
+    socket.on('vote-update', (data) => {
+      const m1 = Object.values(data.votes).filter(v => v.choice === 0).length;
+      const m2 = Object.values(data.votes).filter(v => v.choice === 1).length;
+      document.getElementById('m1votes').textContent = m1;
+      document.getElementById('m2votes').textContent = m2;
+      document.getElementById('voteStatus').textContent = `${data.playersVoted}/${data.totalPlayers} voted`;
+    });
+
+    socket.on('tournament-end', (data) => {
+      showPhase('resultsPhase');
+      document.getElementById('winnerImg').src = data.winner.poster;
+      document.getElementById('winnerTitle').textContent = data.winner.title;
+    });
+
+    function showPhase(id) {
+      document.querySelectorAll('.phase').forEach(p => p.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+    }
+
+    function startSelection() {
+      socket.emit('start-selection', roomCode);
+      showPhase('selectionPhase');
+      startTimer(180, 'selectionTimer', startTournament);
+    }
+
+    function startTournament() {
+      socket.emit('start-tournament', roomCode);
+      showPhase('votingPhase');
+    }
+
+    function advanceMatch() {
+      socket.emit('advance-match', roomCode);
+    }
+
+    function startTimer(seconds, elemId, callback) {
+      const el = document.getElementById(elemId);
+      const int = setInterval(() => {
+        seconds--;
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        el.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+        if (seconds <= 0) {
+          clearInterval(int);
+          if (callback) callback();
+        }
+      }, 1000);
+    }
+  </script>
+</body>
+</html>
