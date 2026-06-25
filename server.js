@@ -1,23 +1,24 @@
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, { cors: { origin: "*" } });
 
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
 const rooms = {};
 const defaultMovies = [
-  { id: 1, title: 'Oppenheimer', rating: 'R', stars: 8.5, desc: 'J. Robert Oppenheimer and the Manhattan Project.', poster: 'https://image.tmdb.org/t/p/w342/8Gxv8gSZDMIA_Pe0ZwTTP0MwMUc.jpg' },
-  { id: 2, title: 'Dune: Part Two', rating: 'PG-13', stars: 8.3, desc: 'Paul Atreides seeks revenge on the conspirators.', poster: 'https://image.tmdb.org/t/p/w342/eu0QSqL305wcsZ3K23nLmwuZcD8.jpg' },
-  { id: 3, title: 'Barbie', rating: 'PG-13', stars: 7.9, desc: 'Barbie and Ken venture into the real world.', poster: 'https://image.tmdb.org/t/p/w342/iJeGLCUvNGY5OvPrtCKfkqJllVT.jpg' },
-  { id: 4, title: 'Inside Out 2', rating: 'G', stars: 8.2, desc: 'Riley discovers new emotions in her teenage years.', poster: 'https://image.tmdb.org/t/p/w342/vpnVM8EKipMKPKF0F4G0o9PJ7Zb.jpg' },
-  { id: 5, title: 'Killers of the Flower Moon', rating: 'R', stars: 8.0, desc: 'The Osage murders in 1920s Oklahoma.', poster: 'https://image.tmdb.org/t/p/w342/dB6Krk806DuKvIIiF5pCKSuoEKW.jpg' },
-  { id: 6, title: 'The Brutalist', rating: 'R', stars: 8.1, desc: 'A Hungarian architect rebuilds in postwar America.', poster: 'https://image.tmdb.org/t/p/w342/aMnHoceqy5OzPpnKhZhxBqlGSJC.jpg' },
-  { id: 7, title: 'The Zone of Interest', rating: 'R', stars: 7.7, desc: 'Life adjacent to history\'s darkest chapters.', poster: 'https://image.tmdb.org/t/p/w342/5ZlC5VqLlH91iO0S2ZL9nVtdxfE.jpg' },
-  { id: 8, title: 'Poor Things', rating: 'R', stars: 7.5, desc: 'A woman brought back to life on a daring adventure.', poster: 'https://image.tmdb.org/t/p/w342/gWbktsosS3Yky4xMM2C2mKpKsY1.jpg' }
+  { id: 1, title: 'Oppenheimer', rating: 'R', stars: 8.5, poster: 'https://image.tmdb.org/t/p/w342/8Gxv8gSZDMIA_Pe0ZwTTP0MwMUc.jpg' },
+  { id: 2, title: 'Dune: Part Two', rating: 'PG-13', stars: 8.3, poster: 'https://image.tmdb.org/t/p/w342/eu0QSqL305wcsZ3K23nLmwuZcD8.jpg' },
+  { id: 3, title: 'Barbie', rating: 'PG-13', stars: 7.9, poster: 'https://image.tmdb.org/t/p/w342/iJeGLCUvNGY5OvPrtCKfkqJllVT.jpg' },
+  { id: 4, title: 'Inside Out 2', rating: 'G', stars: 8.2, poster: 'https://image.tmdb.org/t/p/w342/vpnVM8EKipMKPKF0F4G0o9PJ7Zb.jpg' },
+  { id: 5, title: 'Killers of the Flower Moon', rating: 'R', stars: 8.0, poster: 'https://image.tmdb.org/t/p/w342/dB6Krk806DuKvIIiF5pCKSuoEKW.jpg' },
+  { id: 6, title: 'The Brutalist', rating: 'R', stars: 8.1, poster: 'https://image.tmdb.org/t/p/w342/aMnHoceqy5OzPpnKhZhxBqlGSJC.jpg' },
+  { id: 7, title: 'The Zone of Interest', rating: 'R', stars: 7.7, poster: 'https://image.tmdb.org/t/p/w342/5ZlC5VqLlH91iO0S2ZL9nVtdxfE.jpg' },
+  { id: 8, title: 'Poor Things', rating: 'R', stars: 7.5, poster: 'https://image.tmdb.org/t/p/w342/gWbktsosS3Yky4xMM2C2mKpKsY1.jpg' }
 ];
 
 function generateRoomCode() {
@@ -30,9 +31,22 @@ function createRoom() {
   return code;
 }
 
-app.get('/', (req, res) => res.send(mainPage));
-app.get('/host', (req, res) => res.send(hostPage));
-app.get('/join', (req, res) => res.send(joinPage));
+function createBracket(movies) {
+  const rounds = [];
+  const matches = [];
+  for (let i = 0; i < movies.length; i += 2) {
+    matches.push({ id: matches.length, m1: movies[i], m2: i + 1 < movies.length ? movies[i + 1] : null, w: null });
+  }
+  rounds.push([...matches]);
+  let current = matches;
+  while (current.length > 1) {
+    const next = [];
+    for (let i = 0; i < current.length; i += 2) next.push({ id: next.length, m1: null, m2: null, w: null });
+    rounds.push([...next]);
+    current = next;
+  }
+  return rounds;
+}
 
 io.on('connection', (socket) => {
   socket.on('create-room', (callback) => {
@@ -143,27 +157,5 @@ io.on('connection', (socket) => {
   });
 });
 
-function createBracket(movies) {
-  const rounds = [];
-  const matches = [];
-  for (let i = 0; i < movies.length; i += 2) {
-    matches.push({ id: matches.length, m1: movies[i], m2: i + 1 < movies.length ? movies[i + 1] : null, w: null });
-  }
-  rounds.push([...matches]);
-  let current = matches;
-  while (current.length > 1) {
-    const next = [];
-    for (let i = 0; i < current.length; i += 2) next.push({ id: next.length, m1: null, m2: null, w: null });
-    rounds.push([...next]);
-    current = next;
-  }
-  return rounds;
-}
-
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Server running on ${PORT}`));
-
-const mainPage = `<!DOCTYPE html><html><head><title>🎬 Movie Bracket Party</title><style>body{font-family:'Comic Sans MS',cursive;background:linear-gradient(135deg,#FF6B9D 0%,#C44569 25%,#F8B195 50%,#FF9671 75%,#FFB7A6 100%);display:flex;align-items:center;justify-content:center;height:100vh;margin:0}.container{text-align:center;background:#fff;padding:3rem;border-radius:30px;box-shadow:0 20px 60px rgba(0,0,0,.3);border:6px solid #FFD700}h1{font-size:60px;margin-bottom:1rem;color:#FF6B9D;text-shadow:3px 3px 0 #FFD700}button{padding:20px 40px;font-size:24px;background:linear-gradient(135deg,#FF6B9D 0%,#C44569 100%);color:#fff;border:none;border-radius:20px;cursor:pointer;margin:1rem;font-family:'Comic Sans MS',cursive;font-weight:bold;box-shadow:0 8px 0 rgba(0,0,0,.2);transition:all .2s}button:hover{transform:translateY(-4px);box-shadow:0 12px 0 rgba(0,0,0,.2)}</style></head><body><div class="container"><h1>🎬 MOVIE BRACKET PARTY 🎬</h1><button onclick="location.href='/host'">📺 HOST (TV)</button><button onclick="location.href='/join'">📱 JOIN (Phone)</button></div></body></html>`;
-
-const hostPage = require('fs').existsSync('host.html') ? require('fs').readFileSync('host.html', 'utf8') : `<h1>Host page loading...</h1>`;
-const joinPage = require('fs').existsSync('join.html') ? require('fs').readFileSync('join.html', 'utf8') : `<h1>Join page loading...</h1>`;
