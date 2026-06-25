@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Movie Bracket - Join</title>
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Comic Sans MS', cursive; background: linear-gradient(135deg, #FF6B9D 0%, #C44569 25%, #F8B195 50%, #FF9671 75%, #FFB7A6 100%); color: #333; min-height: 100vh; padding: 1rem; }
+    .container { max-width: 600px; margin: 0 auto; padding: 2rem; background: white; border-radius: 30px; border: 6px solid #FFD700; box-shadow: 0 20px 60px rgba(0,0,0,.3); }
+    h1 { font-size: 36px; margin-bottom: 1.5rem; color: #FF6B9D; text-shadow: 2px 2px 0 #FFD700; text-align: center; }
+    h2 { color: #FF6B9D; margin: 1rem 0; font-size: 20px; }
+    input { width: 100%; padding: 14px; margin: 0.7rem 0; border: 3px solid #FFD700; border-radius: 12px; font-size: 16px; font-family: 'Comic Sans MS', cursive; }
+    button { width: 100%; padding: 16px; background: linear-gradient(135deg, #FF6B9D 0%, #C44569 100%); color: white; border: none; border-radius: 16px; cursor: pointer; font-size: 18px; font-weight: bold; margin: 1rem 0; font-family: 'Comic Sans MS', cursive; box-shadow: 0 6px 0 rgba(0,0,0,.2); transition: all .2s; }
+    button:hover { transform: translateY(-3px); }
+    button:disabled { opacity: .5; }
+    .phase { display: none; }
+    .phase.active { display: block; animation: popIn .3s ease; }
+    @keyframes popIn { from { opacity: 0; transform: scale(.95); } to { opacity: 1; transform: scale(1); } }
+    .avatar-preview { font-size: 100px; text-align: center; margin: 1.5rem 0; }
+    .avatar-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; margin: 1rem 0; }
+    .avatar-option { padding: .75rem; border: 3px solid #FFD700; border-radius: 12px; cursor: pointer; background: #FFFACD; transition: all .2s; font-size: 12px; font-weight: bold; }
+    .avatar-option:hover { transform: scale(1.05); }
+    .avatar-option.selected { background: #FF6B9D; color: white; }
+    .movie-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; margin: 1.5rem 0; }
+    .movie-card { cursor: pointer; border: 4px solid #FFD700; border-radius: 12px; overflow: hidden; transition: all .2s; }
+    .movie-card:hover { transform: scale(1.05); }
+    .movie-card.selected { border-color: #FF6B9D; box-shadow: 0 0 20px rgba(255, 107, 157, .5); background: #FFE5EC; }
+    .movie-card img { width: 100%; height: 140px; object-fit: cover; }
+    .movie-card p { padding: .5rem; font-size: 10px; font-weight: bold; background: #f9f9f9; }
+    .voting-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin: 2rem 0; }
+    .vote-card { cursor: pointer; border: 4px solid #FFD700; border-radius: 12px; overflow: hidden; transition: all .2s; }
+    .vote-card:hover { transform: scale(1.02); }
+    .vote-card.voted { border-color: #FF6B9D; box-shadow: 0 0 30px rgba(255, 107, 157, .6); }
+    .vote-card img { width: 100%; height: 200px; object-fit: cover; }
+    .vote-card p { padding: 1rem; font-size: 14px; font-weight: bold; background: linear-gradient(135deg, #FFE5EC 0%, #FFEAA7 100%); }
+    .timer { font-size: 48px; color: #FF6B9D; font-weight: bold; margin: 1.5rem 0; text-shadow: 2px 2px 0 #FFD700; text-align: center; font-family: Arial; }
+    .round-info { font-size: 20px; font-weight: bold; color: #FF6B9D; margin: 1rem 0; text-shadow: 2px 2px 0 #FFD700; text-align: center; }
+    .winner-display { max-width: 400px; margin: 2rem auto; }
+    .winner-display img { width: 100%; border-radius: 12px; border: 6px solid #FFD700; }
+    .winner-display p { text-align: center; font-size: 18px; font-weight: bold; color: #FF6B9D; margin-top: 1rem; }
+    .center { text-align: center; }
+    label { display: block; margin: 1rem 0 .5rem; font-weight: bold; color: #FF6B9D; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎬 Movie Bracket 🎬</h1>
+
+    <!-- Join Phase -->
+    <div id="joinPhase" class="phase active">
+      <h2>Join a Room</h2>
+      <input type="text" id="roomCode" placeholder="ROOM CODE" maxlength="4" style="font-size: 24px; text-align: center; letter-spacing: 4px; text-transform: uppercase;" />
+      <input type="text" id="playerName" placeholder="Your Name" />
+      <button onclick="goToAvatar()">Continue →</button>
+    </div>
+
+    <!-- Avatar Phase -->
+    <div id="avatarPhase" class="phase">
+      <h2>Create Your Avatar</h2>
+      <div class="avatar-preview" id="avatarPreview">👤</div>
+      <label>Skin:</label>
+      <div class="avatar-grid">
+        <div class="avatar-option selected" style="background:#F4A460" onclick="updateAvatar('skin','#F4A460', event)">Light</div>
+        <div class="avatar-option" style="background:#D2691E" onclick="updateAvatar('skin','#D2691E', event)">Medium</div>
+        <div class="avatar-option" style="background:#8B4513" onclick="updateAvatar('skin','#8B4513', event)">Dark</div>
+        <div class="avatar-option" style="background:#FDBCB4" onclick="updateAvatar('skin','#FDBCB4', event)">Pink</div>
+      </div>
+      <label>Hair:</label>
+      <div class="avatar-grid">
+        <div class="avatar-option selected" style="background:#8B4513" onclick="updateAvatar('hair','#8B4513', event)">Brown</div>
+        <div class="avatar-option" style="background:#000" onclick="updateAvatar('hair','#000', event)">Black</div>
+        <div class="avatar-option" style="background:#FFD700" onclick="updateAvatar('hair','#FFD700', event)">Blonde</div>
+        <div class="avatar-option" style="background:#FF0000" onclick="updateAvatar('hair','#FF0000', event)">Red</div>
+      </div>
+      <label>Shirt:</label>
+      <div class="avatar-grid">
+        <div class="avatar-option selected" style="background:#FF6B9D" onclick="updateAvatar('shirt','#FF6B9D', event)">Pink</div>
+        <div class="avatar-option" style="background:#4169E1" onclick="updateAvatar('shirt','#4169E1', event)">Blue</div>
+        <div class="avatar-option" style="background:#32CD32" onclick="updateAvatar('shirt','#32CD32', event)">Green</div>
+        <div class="avatar-option" style="background:#FFD700" onclick="updateAvatar('shirt','#FFD700', event)">Yellow</div>
+      </div>
+      <label>Accessories:</label>
+      <div class="avatar-grid">
+        <div class="avatar-option" onclick="toggleAccessory('glasses', event)">👓 Glasses</div>
+        <div class="avatar-option" onclick="toggleAccessory('hat', event)">🎩 Hat</div>
+        <div class="avatar-option" onclick="toggleAccessory('chain', event)">⛓️ Chain</div>
+        <div class="avatar-option" onclick="toggleAccessory('necklace', event)">💎 Necklace</div>
+      </div>
+      <button onclick="joinRoom()">Enter Party →</button>
+    </div>
+
+    <!-- Lobby Phase -->
+    <div id="lobbyPhase" class="phase">
+      <h2 class="center">Waiting for Host...</h2>
+      <p id="playerList" class="center" style="color: #FF6B9D; font-weight: bold; margin: 2rem 0;"></p>
+    </div>
+
+    <!-- Selection Phase -->
+    <div id="selectionPhase" class="phase">
+      <h2>Select Your Favorites</h2>
+      <div class="timer" id="selectionTimer">3:00</div>
+      <p class="center" style="color: #FF6B9D; font-weight: bold;">Selected: <span id="selectedCount">0</span></p>
+      <div class="movie-grid" id="movieGrid"></div>
+    </div>
+
+    <!-- Voting Phase -->
+    <div id="votingPhase" class="phase">
+      <div class="round-info" id="roundInfo">Round 1 • Match 1</div>
+      <p class="center" style="font-size: 16px; margin-bottom: 1rem;">Which one do you want?</p>
+      <div class="voting-grid" id="votingGrid"></div>
+    </div>
+
+    <!-- Results Phase -->
+    <div id="resultsPhase" class="phase">
+      <h2 class="center">🏆 Tournament Over! 🏆</h2>
+      <p id="winnerName" class="center" style="font-size: 18px; color: #FF6B9D; font-weight: bold;"></p>
+    </div>
+  </div>
+
+  <script>
+    const socket = io();
+    let currentAvatar = { skin: '#F4A460', hair: '#8B4513', glasses: false, hat: false, chain: false, necklace: false, shirt: '#FF6B9D' };
+    let roomCode = '';
+    let playerName = '';
+    let selectedMovies = [];
+    let movies = [];
+
+    socket.on('phase-change', (data) => {
+      movies = data.movies;
+      showPhase('selectionPhase');
+      renderMovieGrid();
+      startTimer(data.timeLimit, 'selectionTimer');
+    });
+
+    socket.on('selection-update', (data) => {
+      document.getElementById('selectedCount').textContent = selectedMovies.length;
+      renderMovieGrid();
+    });
+
+    socket.on('tournament-start', (data) => {
+      showPhase('votingPhase');
+      updateVotingDisplay(data.match);
+      document.getElementById('roundInfo').textContent = `Round 1 • Match 1`;
+    });
+
+    socket.on('next-match', (data) => {
+      document.getElementById('roundInfo').textContent = `Round ${data.currentRound + 1} • Match ${data.currentMatch + 1}`;
+      updateVotingDisplay(data.match);
+    });
+
+    socket.on('tournament-end', (data) => {
+      showPhase('resultsPhase');
+      document.getElementById('winnerName').textContent = '⭐ ' + data.winner.title + ' WINS! ⭐';
+    });
+
+    socket.on('update-players', (data) => {
+      const names = data.players.map(p => p.name).join(', ');
+      document.getElementById('playerList').textContent = '👥 ' + names;
+    });
+
+    function showPhase(id) {
+      document.querySelectorAll('.phase').forEach(p => p.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+    }
+
+    function goToAvatar() {
+      roomCode = document.getElementById('roomCode').value.trim().toUpperCase();
+      playerName = document.getElementById('playerName').value.trim();
+      if (!roomCode || !playerName) {
+        alert('Enter code and name!');
+        return;
+      }
+      updateAvatarPreview();
+      showPhase('avatarPhase');
+    }
+
+    function updateAvatar(key, value, e) {
+      currentAvatar[key] = value;
+      updateAvatarPreview();
+      e.target.parentElement.querySelectorAll('.avatar-option').forEach(o => o.classList.remove('selected'));
+      e.target.classList.add('selected');
+    }
+
+    function toggleAccessory(key, e) {
+      currentAvatar[key] = !currentAvatar[key];
+      updateAvatarPreview();
+      e.target.classList.toggle('selected');
+    }
+
+    function updateAvatarPreview() {
+      document.getElementById('avatarPreview').innerHTML = createAvatarSVG(currentAvatar);
+    }
+
+    function createAvatarSVG(a) {
+      const { skin = '#F4A460', hair = '#8B4513', glasses, hat, chain, necklace, shirt = '#FF6B9D' } = a;
+      return `<svg viewBox="0 0 100 100" style="width:120px;height:120px"><circle cx="50" cy="50" r="45" fill="${skin}"/><circle cx="35" cy="45" r="8" fill="black"/><circle cx="65" cy="45" r="8" fill="black"/><path d="M 40 70 Q 50 75 60 70" stroke="black" stroke-width="2" fill="none"/><path d="M 20 30 Q 50 15 80 30" fill="${hair}"/>${glasses?'<circle cx="35" cy="45" r="10" fill="none" stroke="black" stroke-width="2"/><circle cx="65" cy="45" r="10" fill="none" stroke="black" stroke-width="2"/><line x1="45" y1="45" x2="55" y2="45" stroke="black" stroke-width="2"/>':''} ${hat?'<rect x="15" y="10" width="70" height="20" fill="#FFD700" stroke="black" stroke-width="2"/>':''} ${chain?'<line x1="50" y1="60" x2="50" y2="80" stroke="#FFD700" stroke-width="3"/>':''} ${necklace?'<circle cx="45" cy="65" r="4" fill="#FF1493"/><circle cx="50" cy="68" r="4" fill="#FF1493"/><circle cx="55" cy="65" r="4" fill="#FF1493"/>':''}<rect x="30" y="70" width="40" height="30" fill="${shirt}" stroke="black" stroke-width="2"/></svg>`;
+    }
+
+    function joinRoom() {
+      socket.emit('join-room', { code: roomCode, name: playerName, avatar: currentAvatar }, (response) => {
+        if (response.success) {
+          showPhase('lobbyPhase');
+        } else {
+          alert(response.error);
+        }
+      });
+    }
+
+    function renderMovieGrid() {
+      document.getElementById('movieGrid').innerHTML = movies.map(m => `
+        <div class="movie-card ${selectedMovies.find(x => x.id === m.id) ? 'selected' : ''}" onclick="selectMovie(${m.id}, '${m.title}')">
+          <img src="${m.poster}" onerror="this.src='https://via.placeholder.com/100x140?text=${m.title}'">
+          <p>${m.title}</p>
+        </div>
+      `).join('');
+    }
+
+    function selectMovie(id, title) {
+      const idx = selectedMovies.findIndex(m => m.id === id);
+      if (idx >= 0) selectedMovies.splice(idx, 1);
+      else selectedMovies.push({ id, title });
+      socket.emit('select-movie', { code: roomCode, movieId: id });
+    }
+
+    function updateVotingDisplay(match) {
+      document.getElementById('votingGrid').innerHTML = `
+        <div class="vote-card" onclick="vote(0)"><img src="${match.m1.poster}" onerror="this.src='https://via.placeholder.com/240x200?text=${match.m1.title}'"><p>${match.m1.title}</p></div>
+        <div class="vote-card" onclick="vote(1)"><img src="${match.m2.poster}" onerror="this.src='https://via.placeholder.com/240x200?text=${match.m2.title}'"><p>${match.m2.title}</p></div>
+      `;
+    }
+
+    function vote(choice) {
+      socket.emit('vote', { code: roomCode, choice });
+      document.querySelectorAll('.vote-card')[choice].classList.add('voted');
+    }
+
+    function startTimer(seconds, elemId) {
+      const el = document.getElementById(elemId);
+      const int = setInterval(() => {
+        seconds--;
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        el.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+        if (seconds <= 0) clearInterval(int);
+      }, 1000);
+    }
+
+    function playSound(freq, duration) {
+      try {
+        const ac = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ac.createOscillator();
+        const gain = ac.createGain();
+        osc.connect(gain);
+        gain.connect(ac.destination);
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(.2, ac.currentTime);
+        gain.gain.exponentialRampToValueAtTime(.01, ac.currentTime + duration);
+        osc.start();
+        osc.stop(ac.currentTime + duration);
+      } catch(e) {}
+    }
+  </script>
+</body>
+</html>
